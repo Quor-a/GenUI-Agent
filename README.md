@@ -37,7 +37,7 @@ AI 生成 GenUI JSON → SDK 渲染原生 Compose 界面
 | **通知组件家族** | 30 类型（进度卡/聚合堆栈/社交爆发/系统警示…） |
 | **语法高亮** | 11 语言零依赖引擎（关键字/字符串/注释/数字着色 + 复制 + 行号） |
 | **GFM Markdown** | 任务列表/表格/删除线/Alerts/引用块/自动链接，流式安全 |
-| **互动表单** | Kai9000 式 `collectFrom` 状态总线：输入实时聚合，提交回传 AI |
+| **互动表单** | `collectFrom` 状态总线：输入实时聚合，提交回传 AI |
 | **动作系统** | navigate / openUrl / clipboard / haptic / dialog / custom(handlerId) |
 | **容错管线** | 未知动作丢弃不炸页 · JSON 脏数据修复 · 流式渐进渲染 |
 
@@ -84,7 +84,6 @@ GenUI JSON 示例：
 本项目的部分交互与架构模式参考了以下开源项目（各项目保留其自身版权）：
 
 - [ZorvAI](https://github.com/Quor-a/ZorvAI) — 侧边栏抽屉 / 思考面板 / 语音球交互模式
-- [Kai 9000](https://github.com/SimonSchubert/Kai) — 互动表单状态聚合（collectFrom）设计
 - [llm-ui](https://github.com/llm-ui/llm-ui) — LLM 输出流式渲染思路
 - [A2UI](https://developers.googleblog.com) — 可移植生成式 UI 规范
 - [Vercel AI SDK](https://ai-sdk.dev) — Generative UI 范式
