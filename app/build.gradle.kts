@@ -12,8 +12,8 @@ android {
         applicationId = "com.genui.aiapp"
         minSdk = 24
         targetSdk = 35
-        versionCode = 74
-        versionName = "6.7.0"
+        versionCode = 82
+        versionName = "7.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

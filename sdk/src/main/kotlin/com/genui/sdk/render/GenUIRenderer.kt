@@ -43,16 +43,20 @@ fun GenUIRenderer(
     // 为保持 render 模块独立性，此处提供基础入口
     // 实际使用时建议通过 GenUI 入口类创建完整的渲染环境
 
+    // RenderContext 单实例记忆（spec/state/host 变化才重建）——
+    // 之前每帧 new：state/executor/dialogHolder 引用全断（toggle 后丢状态、对话框失联）
+    val ctx = rememberRenderContext(spec, host, theme, registry)
+
     // 渲染根组件 — 外层 Box 提供确定的尺寸约束，
     // 防止内部 scroll 组件在无限高度下测量崩溃
     com.genui.sdk.interaction.FormStateHost(content = {
         Box(modifier = modifier.fillMaxSize()) {
-            RenderNode(spec.root, rememberRenderContext(spec, host, theme, registry))
+            RenderNode(spec.root, ctx)
         }
     })
 
-    // 渲染对话框叠加层
-    GenUIDialogOverlay(rememberRenderContext(spec, host, theme, registry))
+    // 渲染对话框叠加层（与主树共享 context —— 同一 state/dialogHolder）
+    GenUIDialogOverlay(ctx)
 }
 
 /**

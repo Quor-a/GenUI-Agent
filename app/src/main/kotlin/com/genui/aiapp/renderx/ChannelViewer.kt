@@ -100,39 +100,13 @@ fun ChannelViewer(page: ChannelPage, modifier: Modifier = Modifier, embedded: Bo
                     )
                 }
                 is ChannelPage.FlatPage -> {
-                    // A2UI → GenUI 对接：优先转 UISpec 用 GenUI SDK 渲染（获得 300+ 组件与效果引擎）
-                    val converted = remember(page.doc) {
-                        runCatching {
-                            com.genui.sdk.interop.FlatDocToGenUI.convert(
-                                root = page.doc.root,
-                                nodes = page.doc.nodes.mapValues { (_, n) ->
-                                    com.genui.sdk.interop.FlatDocToGenUI.Node(n.id, n.type, n.text, n.kids, n.props)
-                                }
-                            )
-                        }.getOrNull()
-                    }
-                    if (converted != null) {
-                        val host = remember {
-                            object : com.genui.sdk.interaction.DefaultActionHost() {
-                                override fun handleCustom(handlerId: String, payload: kotlinx.serialization.json.JsonElement): Any? {
-                                    onAction(handlerId)
-                                    return null
-                                }
-                            }
-                        }
-                        com.genui.sdk.GenUI.Screen(
-                            spec = converted,
-                            host = host,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                    // A2UI 原生渲染（FlatDocRenderer）：语义最稳，模型 props 直映。
+                    // GenUI 桥接为可选增强（桥接失败/属性不匹配会乱版）——已回退。
+                    val rootType = page.doc.nodes[page.doc.root]?.type
+                    if (rootType == "scroll") {
+                        FlatDocRenderer(page.doc, onAction = onAction, modifier = Modifier.fillMaxSize())
                     } else {
-                        // 转换失败回退原生 FlatDocRenderer（根是 scroll → 内层自滚，防双重滚动）
-                        val rootType = page.doc.nodes[page.doc.root]?.type
-                        if (rootType == "scroll") {
-                            FlatDocRenderer(page.doc, onAction = onAction, modifier = Modifier.fillMaxSize())
-                        } else {
-                            FlatDocRenderer(page.doc, onAction = onAction, modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()))
-                        }
+                        FlatDocRenderer(page.doc, onAction = onAction, modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()))
                     }
                 }
                 is ChannelPage.HtmlPage -> {

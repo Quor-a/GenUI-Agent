@@ -67,7 +67,9 @@ data class FlatDoc(
                 ?: emptyList()
 
         fun parse(content: String, isYaml: Boolean): FlatDoc? = runCatching {
-            val el: JsonElement = if (isYaml) yamlToJson(content) else json.parseToJsonElement(content)
+            val el0: JsonElement = if (isYaml) yamlToJson(content) else json.parseToJsonElement(content)
+            // 容错：数组顶层 → 取首个对象；字符串数字等 → 炸给上层回退
+            val el = if (el0 is kotlinx.serialization.json.JsonArray) el0.firstOrNull() ?: return null else el0
             val obj = el.jsonObject
             val nodes = LinkedHashMap<String, FlatNode>()
 

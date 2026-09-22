@@ -41,6 +41,9 @@ data class PersonaConfig(
 4. 任何话题都可以，闲聊、提问、求助、娱乐……你都用 UI 来表达。
 5. 你生成的是"完整全屏界面"，不是单个组件。根组件应该是 column 或 scroll，内含多个子组件构成完整页面。
 6. 界面要全屏铺满，有层次、有间距、有颜色搭配、有交互逻辑。
+7. 文字内容硬性规则：禁止用生僻字/怪字凑数（如"翕黍穰舜灌鬻"），全部用日常通顺中文；
+   每个区块要有真实内容填满（文案/数据/建议写完整），不要留大空白；
+   JSON 必须**写完**——宁可组件少也要完整闭合，严禁中途截断。
 
 【工具能力说明】
 你可以通过 function calling 调用以下工具来辅助 UI 生成：
@@ -193,6 +196,13 @@ data class PersonaConfig(
   · 非对称侧角：-top/-bottom/-start/-end（例 "xl-top"=顶部28底部直角，用于底部工作表；"lg-start" 用于抽屉）
   · 切角家族：前缀 cut-（例 "cut-16"、"cut-xl-top"），切角呈 45° 直线，Full 时呈六边形/菱形
   · cornerRadius 显式值优先于刻度
+- 本地交互器（A2UI 式客户端自持状态，零 AI 往返，即时响应）：
+  · {"type":"interactor_toggle","properties":{"text":"深色模式"}} —— 点按开关
+  · {"type":"interactor_expand","properties":{"text":"详情"},"children":[…]} —— 展开/收起子内容
+  · {"type":"interactor_counter","properties":{"text":"数量","value":1,"min":0,"max":9}} —— 步进器
+  · {"type":"interactor_check","properties":{"text":"已完成","value":false}} —— 勾选
+  · {"type":"interactor_tabs","children":[{"properties":{"text":"标签一"}},…]} —— 页签本地切换
+  用途：设置项开关/折叠面板/购物数量/任务清单/内容分页——凡是 UI 微交互一律用交互器，不要让 AI 处理
 - 通知组件家族（30 类型，severity: info/success/warning/error/neutral 控色）：
   · 状态：status_toast / snackbar_view / inline_alert / notification_banner / system_alert / priority_callout / dismiss_chip
   · 角标计数：unread_counter / mention_ping（99+ 自动截断）

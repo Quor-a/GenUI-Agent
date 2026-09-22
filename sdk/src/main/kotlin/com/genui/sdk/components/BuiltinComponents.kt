@@ -115,6 +115,13 @@ object BuiltinComponents {
         registry.register("pet") { c, ctx -> PetComponentRenderer(c, ctx) }
         // 通知组件家族（30 类型：横幅/toast/进度/社交/聚合/警示/系统级）
         NotificationFamily.registerAll(registry)
+        // A2UI 式本地交互器（客户端自持状态，零往返）：
+        // toggle（点按切换）、expand（展开收起）、counter（步进）、check（勾选）
+        registry.register("interactor_toggle") { c, ctx -> com.genui.sdk.components.InteractorRenderer(c, ctx, "toggle") }
+        registry.register("interactor_expand") { c, ctx -> com.genui.sdk.components.InteractorRenderer(c, ctx, "expand") }
+        registry.register("interactor_counter") { c, ctx -> com.genui.sdk.components.InteractorRenderer(c, ctx, "counter") }
+        registry.register("interactor_check") { c, ctx -> com.genui.sdk.components.InteractorRenderer(c, ctx, "check") }
+        registry.register("interactor_tabs") { c, ctx -> com.genui.sdk.components.InteractorRenderer(c, ctx, "tabs") }
         registry.register(ComponentTypes.HEADING5) { c, ctx -> HeadingRenderer(c, ctx) }
         registry.register(ComponentTypes.HEADING6) { c, ctx -> HeadingRenderer(c, ctx) }
         registry.register(ComponentTypes.TITLE) { c, ctx -> TitleSubtitleRenderer(c, ctx) }

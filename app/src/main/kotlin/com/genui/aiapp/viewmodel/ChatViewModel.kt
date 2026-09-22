@@ -278,8 +278,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             val body = m.groupValues[2].trim()
             when (kind) {
                 "a2ui" -> {
-                    val isYaml = !body.startsWith("{") && !body.startsWith("[")
-                    FlatDocParser(body, isYaml)?.let { doc ->
+                    val bodyT = body.trim()
+                    var doc = FlatDocParser(bodyT, !bodyT.startsWith("{") && !bodyT.startsWith("["))
+                    if (doc == null) {
+                        // 抢救：模型围栏里混了杂文字 → 截取首个 { 到末个 } 的子串重试
+                        val s = bodyT.indexOf('{')
+                        val e = bodyT.lastIndexOf('}')
+                        if (s >= 0 && e > s) {
+                            doc = FlatDocParser(bodyT.substring(s, e + 1), false)
+                        }
+                    }
+                    if (doc != null) {
                         return ChannelPage.FlatPage(channelTitle(text, 1) ?: "界面", doc) to raw
                     }
                 }
@@ -411,6 +420,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         // 用户点名通道（a2ui/markdown/html）→ 本轮锁定
         forcedChannel = channelFromRequest(text)
+        uiReviewRounds = 0
 
         // 用户点名通道（a2ui/markdown/html）→ 本轮锁定
         forcedChannel = channelFromRequest(text)
@@ -457,11 +467,21 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun renderRulesMessage(forced: String?): GenUIChatMessage = GenUIChatMessage(
         role = "system",
-        content = (if (forced != null)
+        content = (if (forced != null) (
             "# 本轮通道已由用户锁定（最高优先级）\n" +
             "用户明确指定本轮必须使用三反引号" + forced + "围栏输出。\n" +
             "绝对禁止输出任何其他围栏（markdown/a2ui/html/genui 都不行）；\n" +
-            "不要输出 intent/plan/generate 结构；围栏外不得有任何文字。\n"
+            "不要输出 intent/plan/generate 结构；围栏外不得有任何文字。\n" +
+            (if (forced == "a2ui") (
+                "\n# a2ui 输出格式（严格遵守，否则渲染失败）\n" +
+                "围栏内必须是单个 JSON 对象，两种合法形态任选：\n" +
+                "形态A（邻接表）：{\"root\":\"r1\",\"components\":[{\"id\":\"r1\",\"t\":\"column\"},{\"id\":\"r2\",\"t\":\"text\",\"text\":\"标题\"}]}\n" +
+                "形态B（树形）：{\"root\":{\"t\":\"column\",\"children\":[{\"t\":\"text\",\"text\":\"标题\"}]}}\n" +
+                "t 白名单：text/heading/column/row/scroll/card/button/divider/spacer/image/progress/chip/input\n" +
+                "props（可选）：bg/color/size/radius/padding（数字或颜色字符串）\n" +
+                "button 的 text 会作为点击动作回传。禁止 YAML、禁止数组顶层。\n"
+            ) else "")
+        )
         else
             "# 输出通道选择（第一优先级）\n" +
             "- GenUI SDK 通道是主力默认：生成式界面/交互应用一律走 GenUI 流程\n" +
@@ -546,9 +566,24 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         continue
                     }
 
-                    // 最终文本结果 — 处理并结束循环（拼接续写片段后再提取）
+                    // ── 生成后自检闭环：不可渲染/显示异常/配色错 → 自动修正，改好才结束 ──
                     val combined = if (pendingText.isBlank()) result.content
                                    else pendingText + "\n" + result.content
+                    val review = reviewGeneratedUi(combined)
+                    if (review != null && uiReviewRounds < MAX_UI_REVIEW_ROUNDS) {
+                        uiReviewRounds++
+                        _state.update {
+                            it.copy(
+                                conversationHistory = it.conversationHistory +
+                                    GenUIChatMessage(role = "assistant", content = combined.take(3000)) +
+                                    GenUIChatMessage(role = "user", content = review),
+                                streamingText = "",
+                                streamingReasoning = ""
+                            )
+                        }
+                        continue
+                    }
+
                     handleTextResult(GenUILlmResult.Text(combined, result.reasoning))
                     return
                 }
@@ -591,6 +626,9 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         /** genui 断流续写的最大次数 */
         const val MAX_GENUI_CONTINUATIONS = 2
 
+        /** 生成后自检最大轮数 */
+        const val MAX_UI_REVIEW_ROUNDS = 2
+
         /** 续写提示词 */
         const val GENUI_CONTINUE_PROMPT =
             "你的上一条输出在 genui 代码块中途被截断了。现在请【跳过所有思考过程】，" +
@@ -598,6 +636,51 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             "第一行就直接输出 ```genui 代码块，内容是一个【完整且精简】的 JSON：" +
             "从 {\"id\" 开始到收尾括号完整闭合，控制在 600 字以内，" +
             "删掉可有可无的装饰性组件，但必须保留核心功能内容和完整闭合的结构。"
+    }
+
+    /** 自检轮数 */
+    private var uiReviewRounds = 0
+
+    /**
+     * 生成后自检（Agent 任务流程终点闸门）：
+     * 返回 null = 合格放行；返回修正指令 = 触发自动修正轮。
+     * 检查项：①GenUI 可渲染 ②无兜底失败特征 ③配色字段合法性
+     */
+    private fun reviewGeneratedUi(fullText: String): String? {
+        // 通道输出（a2ui/markdown/html）不在此闸门（各通道自有校验）
+        if (detectChannel(fullText).let { it != null && it.first !is ChannelPage.FlatPage }) return null
+
+        val json = extractGenUIDsl(fullText, strict = true)
+            ?: extractLargestJson(stripThinkingTags(fullText))
+        // ① 提不出 JSON → 要求重写
+        if (json == null) {
+            return "你上一条回复里没有任何可渲染的 GenUI JSON。请重新输出完整的 ```genui JSON 界面（从 ```genui 围栏开始，不要任何解释）。"
+        }
+        // ② 提出了但解析失败（截断/烂尾）→ autoCloseJson 救过后再验
+        val closed = if (validForCanvas(json, true)) json else autoCloseJson(json)
+        if (closed == null || !validForCanvas(closed, true)) {
+            return "你上一条输出的 JSON 结构损坏（无法解析）。请重新输出【精简且完整闭合】的 ```genui JSON：组件不超过 15 个，保证每个 { 都有配对的 }。"
+        }
+        // ③ 配色/字段抽查：颜色值格式非法（非 #hex/rgba/主题角色）
+        val badColors = Regex("""\"(?:color|Color|backgroundColor|textColor|borderColor|accent)\"\s*:\s*\"([^\"]*)\""""")
+            .findAll(closed).mapNotNull { m -> m.groupValues[1].trim().takeIf { it.isNotBlank() } }
+            .filter { v ->
+                !v.startsWith("#") && !v.startsWith("rgba") && !v.startsWith("rgb") &&
+                v.lowercase() !in setOf("primary","secondary","surface","background","error","onprimary","onsecondary","onsurface","outline","white","black","red","green","blue","gold","gray","grey","orange","purple","pink","yellow","teal","cyan","amber","indigo","lime","brown","navy","silver","darkgray","dimgray","lightgray","dimgrey","aqua","beige","coral","crimson","ivory","khaki","lavender","magenta","maroon","olive","plum","salmon","tan","thistle","tomato","violet","wheat") &&
+                v.toIntOrNull() == null
+            }.toList()
+        if (badColors.isNotEmpty()) {
+            return "界面里以下颜色值格式非法（必须 #RRGGBB 或 #AARRGGBB 或主题角色名）：${badColors.take(3).joinToString("、")}。请重新输出修正配色后的完整 ```genui JSON，其余内容保持不变。"
+        }
+        // ④ 生僻字乱码检测（中文文本里生僻字比例异常）
+        val cjk = Regex("[\u3400-\u9fff]").findAll(closed).map { it.value }.toList()
+        if (cjk.size > 20) {
+            val rareCount = cjk.count { it[0].code in 0x3400..0x4DBF }  // 扩展 A 区=生僻
+            if (rareCount > cjk.size / 5) {
+                return "界面文案出现大量生僻字（疑似乱码凑数）。请用日常通顺中文重写所有文案，重新输出完整 ```genui JSON。"
+            }
+        }
+        return null  // 全部通过
     }
 
     /** 判断文本中的 genui 代码块是否未闭合（输出被截断） */
@@ -639,6 +722,30 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         json = raw, // 存原始围栏，回放时重新路由
                         time = System.currentTimeMillis()
                     )) + it.works).distinctBy { w -> w.json }.take(20)
+                )
+            }
+            persistSession()
+            return
+        }
+
+        // ── A2UI 空白终结者：点名 a2ui 却没渲染 → 诊断页显示原始输出（不空白）──
+        if (forcedChannel == "a2ui" || currentState.currentRequest.contains("a2ui", true)) {
+            val hasA2uiFence = Regex("```a2ui", RegexOption.IGNORE_CASE).containsMatchIn(fullText)
+            val diag = buildString {
+                append("# A2UI 诊断\n\n")
+                append("- 点名通道：a2ui\n")
+                append(if (hasA2uiFence) "- 围栏：找到 ```a2ui（解析失败，待修复）\n"
+                       else "- 围栏：**未找到**（模型没输出 a2ui 围栏）\n")
+                append("- 输出长度：${fullText.length} 字符\n\n")
+                append("## 模型原始输出（前 800 字符）\n\n")
+                append("```\n")
+                append(fullText.take(800))
+                append("\n```")
+            }
+            _state.update {
+                it.copy(
+                    channel = ChannelPage.MarkdownPage("A2UI 诊断", diag),
+                    isStreaming = false, streamingText = "", error = null
                 )
             }
             persistSession()
@@ -1308,8 +1415,36 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 if (StreamingParser.tryParsePartial(json) != null) return json
             }
         }
+        // 第四轮：自动闭合修复 — 截断的 JSON 按括号配平补全尾巴（strict 也允许：
+        // 流式已结束仍被截的完整意图，补 } 后即为可用界面，好过"请点击重试"）
+        candidates.filter { !it.endsWith("}") }.forEach { json ->
+            val closed = autoCloseJson(json) ?: return@forEach
+            if (validForCanvas(closed, strict)) return closed
+        }
         return null
     }
+
+    /** 截断 JSON 自动闭合：统计未配平的 { [ 按序补 } ]，并闭合未完成的字符串/键值 */
+    private fun autoCloseJson(json: String): String? = runCatching {
+        var inStr = false
+        var esc = false
+        val stack = ArrayDeque<Char>()
+        json.forEach { c ->
+            when {
+                esc -> esc = false
+                c == '\\' && inStr -> esc = true
+                c == '"' -> inStr = !inStr
+                !inStr && (c == '{' || c == '[') -> stack.addLast(c)
+                !inStr && (c == '}' || c == ']') -> stack.removeLastOrNull()
+            }
+        }
+        val sb = StringBuilder(json)
+        if (inStr) sb.append('"')
+        while (stack.isNotEmpty()) {
+            sb.append(if (stack.removeLast() == '{') '}' else ']')
+        }
+        sb.toString()
+    }.getOrNull()
 
     /** ```json 代码块提取（多轮择优） */
     private fun extractFromJsonFences(source: String, strict: Boolean): String? {
