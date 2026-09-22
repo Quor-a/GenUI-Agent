@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 主卡片（白色圆角矩形） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,48h48c3.314,0 6,2.686 6,6v24c0,3.314 -2.686,6 -6,6h-48c-3.314,0 -6,-2.686 -6,-6v-24c0,-3.314 2.686,-6 6,-6z"/>
+
+    <!-- 卡片顶部栏 -->
+    <path
+        android:fillColor="#E8E8F0"
+        android:pathData="M24,48h60v8h-60z"/>
+
+    <!-- 闪光/星星图标（在卡片上方，代表 AI 生成） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,16 L58.5,29.5 L72,34 L58.5,38.5 L54,52 L49.5,38.5 L36,34 L49.5,29.5 Z"/>
+
+    <!-- 卡片内的小横线（代表内容行） -->
+    <path
+        android:fillColor="#E0E0E8"
+        android:pathData="M32,64h28v3h-28z"/>
+    <path
+        android:fillColor="#E0E0E8"
+        android:pathData="M32,70h36v3h-36z"/>
+    <path
+        android:fillColor="#E0E0E8"
+        android:pathData="M32,76h20v3h-20z"/>
+
+    <!-- 右下角小圆形按钮 -->
+    <path
+        android:fillColor="#6C5CE7"
+        android:pathData="M70,72m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0"/>
+
+</vector>
